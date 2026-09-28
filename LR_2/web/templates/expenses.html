@@ -1,0 +1,24 @@
+{{define "content"}}
+{{if .Expenses}}
+<table>
+  <thead>
+    <tr><th>№</th><th>Дата</th><th>Описание</th><th class="num">Сумма, ₽</th></tr>
+  </thead>
+  <tbody>
+    {{range .Expenses}}
+    <tr>
+      <td>{{.ID}}</td>
+      <td>{{.Date.Format "02.01.2006"}}</td>
+      <td>{{.Description}}</td>
+      <td class="num">{{printf "%.2f" .Amount}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+  <tfoot>
+    <tr><td colspan="3">Итого</td><td class="num">{{printf "%.2f" .Total}}</td></tr>
+  </tfoot>
+</table>
+{{else}}
+<p class="empty">Трат пока нет. <a href="/expenses/new">Добавить первую</a></p>
+{{end}}
+{{end}}
