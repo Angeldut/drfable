@@ -1,0 +1,15 @@
+{{define "content"}}
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="POST" action="/expenses">
+  <label>Сумма
+    <input type="text" name="amount" inputmode="decimal" value="{{.Amount}}" required>
+  </label>
+  <label>Описание
+    <input type="text" name="description" value="{{.Description}}" required>
+  </label>
+  <label>Дата
+    <input type="date" name="date" value="{{.Date}}" required>
+  </label>
+  <button type="submit">Сохранить</button>
+</form>
+{{end}}
