@@ -1,0 +1,16 @@
+{{define "content"}}
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="POST" action="/register">
+  <label>Email
+    <input type="email" name="email" value="{{.FormEmail}}" autocomplete="username" required autofocus>
+  </label>
+  <label>Пароль (не короче 8 символов)
+    <input type="password" name="password" autocomplete="new-password" minlength="8" required>
+  </label>
+  <label>Повторите пароль
+    <input type="password" name="password_confirm" autocomplete="new-password" minlength="8" required>
+  </label>
+  <button type="submit">Зарегистрироваться</button>
+</form>
+<p>Уже есть аккаунт? <a href="/login">Войти</a></p>
+{{end}}

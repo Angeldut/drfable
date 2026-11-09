@@ -2,7 +2,10 @@ module lr2
 
 go 1.22
 
-require modernc.org/sqlite v1.34.4
+require (
+	golang.org/x/crypto v0.25.0
+	modernc.org/sqlite v1.34.4
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

@@ -12,6 +12,7 @@ import (
 )
 
 var ErrNotFound = errors.New("expense not found")
+
 const dateLayout = "2006-01-02"
 const selectExpenses = `
 SELECT e.id, e.amount, e.description, e.date, e.category_id, c.name
@@ -33,9 +34,9 @@ func nullableID(id int64) any {
 	return id
 }
 
-func buildWhere(f models.ExpenseFilter) (string, []any) {
-	var conds []string
-	var args []any
+func buildWhere(userID int64, f models.ExpenseFilter) (string, []any) {
+	conds := []string{"e.user_id = ?"}
+	args := []any{userID}
 
 	if f.CategoryID != 0 {
 		conds = append(conds, "e.category_id = ?")
@@ -49,17 +50,13 @@ func buildWhere(f models.ExpenseFilter) (string, []any) {
 		conds = append(conds, "e.date <= ?")
 		args = append(args, f.To.Format(dateLayout))
 	}
-
-	if len(conds) == 0 {
-		return "", nil
-	}
 	return " WHERE " + strings.Join(conds, " AND "), args
 }
 
-func (r *ExpenseRepository) Create(ctx context.Context, amount float64, description string, date time.Time, categoryID int64) (models.Expense, error) {
-	const query = `INSERT INTO expenses (amount, description, date, category_id) VALUES (?, ?, ?, ?)`
+func (r *ExpenseRepository) Create(ctx context.Context, userID int64, amount float64, description string, date time.Time, categoryID int64) (models.Expense, error) {
+	const query = `INSERT INTO expenses (user_id, amount, description, date, category_id) VALUES (?, ?, ?, ?, ?)`
 
-	res, err := r.db.ExecContext(ctx, query, amount, description, date.Format(dateLayout), nullableID(categoryID))
+	res, err := r.db.ExecContext(ctx, query, userID, amount, description, date.Format(dateLayout), nullableID(categoryID))
 	if err != nil {
 		return models.Expense{}, fmt.Errorf("create expense: %w", err)
 	}
@@ -72,8 +69,8 @@ func (r *ExpenseRepository) Create(ctx context.Context, amount float64, descript
 	return models.Expense{ID: id, Amount: amount, Description: description, Date: date, CategoryID: categoryID}, nil
 }
 
-func (r *ExpenseRepository) GetAll(ctx context.Context, f models.ExpenseFilter) ([]models.Expense, error) {
-	where, args := buildWhere(f)
+func (r *ExpenseRepository) GetAll(ctx context.Context, userID int64, f models.ExpenseFilter) ([]models.Expense, error) {
+	where, args := buildWhere(userID, f)
 	query := selectExpenses + where + " ORDER BY e.date DESC, e.id DESC"
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -97,8 +94,8 @@ func (r *ExpenseRepository) GetAll(ctx context.Context, f models.ExpenseFilter) 
 	return expenses, nil
 }
 
-func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (models.Expense, error) {
-	row := r.db.QueryRowContext(ctx, selectExpenses+" WHERE e.id = ?", id)
+func (r *ExpenseRepository) GetByID(ctx context.Context, userID, id int64) (models.Expense, error) {
+	row := r.db.QueryRowContext(ctx, selectExpenses+" WHERE e.user_id = ? AND e.id = ?", userID, id)
 	e, err := scanExpense(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.Expense{}, ErrNotFound
@@ -109,27 +106,28 @@ func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (models.Expen
 	return e, nil
 }
 
-func (r *ExpenseRepository) Update(ctx context.Context, id int64, amount float64, description string, date time.Time, categoryID int64) error {
-	const query = `UPDATE expenses SET amount = ?, description = ?, date = ?, category_id = ? WHERE id = ?`
+func (r *ExpenseRepository) Update(ctx context.Context, userID, id int64, amount float64, description string, date time.Time, categoryID int64) error {
+	const query = `UPDATE expenses SET amount = ?, description = ?, date = ?, category_id = ? WHERE id = ? AND user_id = ?`
 
-	res, err := r.db.ExecContext(ctx, query, amount, description, date.Format(dateLayout), nullableID(categoryID), id)
+	res, err := r.db.ExecContext(ctx, query, amount, description, date.Format(dateLayout), nullableID(categoryID), id, userID)
 	if err != nil {
 		return fmt.Errorf("update expense %d: %w", id, err)
 	}
 	return checkAffected(res, id)
 }
 
-func (r *ExpenseRepository) Delete(ctx context.Context, id int64) error {
-	const query = `DELETE FROM expenses WHERE id = ?`
+func (r *ExpenseRepository) Delete(ctx context.Context, userID, id int64) error {
+	const query = `DELETE FROM expenses WHERE id = ? AND user_id = ?`
 
-	res, err := r.db.ExecContext(ctx, query, id)
+	res, err := r.db.ExecContext(ctx, query, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete expense %d: %w", id, err)
 	}
 	return checkAffected(res, id)
 }
-func (r *ExpenseRepository) Total(ctx context.Context, f models.ExpenseFilter) (float64, error) {
-	where, args := buildWhere(f)
+
+func (r *ExpenseRepository) Total(ctx context.Context, userID int64, f models.ExpenseFilter) (float64, error) {
+	where, args := buildWhere(userID, f)
 	query := `SELECT COALESCE(SUM(e.amount), 0) FROM expenses e` + where
 
 	var total float64
@@ -158,7 +156,7 @@ func scanExpense(s rowScanner) (models.Expense, error) {
 		return models.Expense{}, fmt.Errorf("parse date %q: %w", dateStr, err)
 	}
 	e.Date = date
-	e.CategoryID = catID.Int64 
+	e.CategoryID = catID.Int64
 	e.CategoryName = catName.String
 	return e, nil
 }

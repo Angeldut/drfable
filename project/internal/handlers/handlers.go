@@ -12,6 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
+	"lr2/internal/auth"
 	"lr2/internal/models"
 	"lr2/internal/repository"
 )
@@ -21,7 +24,10 @@ const dateLayout = "2006-01-02"
 type Handler struct {
 	repo       *repository.ExpenseRepository
 	categories *repository.CategoryRepository
+	users      *repository.UserRepository
+	sessions   *repository.SessionRepository
 	templates  map[string]*template.Template
+	dummyHash []byte
 }
 
 type pageData struct {
@@ -38,13 +44,32 @@ type pageData struct {
 	From       string
 	To         string
 	Filtered   bool
+
+	UserEmail string 
+	FormEmail string 
+	Info      string
 }
 
-func New(repo *repository.ExpenseRepository, categories *repository.CategoryRepository, templatesDir string) (*Handler, error) {
+func New(
+	repo *repository.ExpenseRepository,
+	categories *repository.CategoryRepository,
+	users *repository.UserRepository,
+	sessions *repository.SessionRepository,
+	templatesDir string,
+) (*Handler, error) {
 	layout := filepath.Join(templatesDir, "layout.html")
-	h := &Handler{repo: repo, categories: categories, templates: make(map[string]*template.Template)}
+	h := &Handler{
+		repo: repo, categories: categories, users: users, sessions: sessions,
+		templates: make(map[string]*template.Template),
+	}
 
-	for _, page := range []string{"expenses.html", "add.html", "edit.html"} {
+	dummy, err := bcrypt.GenerateFromPassword([]byte("dummy-password"), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	h.dummyHash = dummy
+
+	for _, page := range []string{"expenses.html", "add.html", "edit.html", "login.html", "register.html"} {
 		t, err := template.ParseFiles(layout, filepath.Join(templatesDir, page))
 		if err != nil {
 			return nil, err
@@ -54,7 +79,15 @@ func New(repo *repository.ExpenseRepository, categories *repository.CategoryRepo
 	return h, nil
 }
 
-func (h *Handler) render(w http.ResponseWriter, status int, page string, data pageData) {
+func currentUserID(r *http.Request) int64 {
+	u, _ := auth.UserFromContext(r.Context())
+	return u.ID
+}
+
+func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, page string, data pageData) {
+	if u, ok := auth.UserFromContext(r.Context()); ok {
+		data.UserEmail = u.Email
+	}
 	var buf bytes.Buffer
 	if err := h.templates[page].ExecuteTemplate(&buf, "layout", data); err != nil {
 		log.Printf("render %s: %v", page, err)
@@ -72,6 +105,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := currentUserID(r)
 	filter, filterErr := parseFilter(r.URL.Query())
 	status := http.StatusOK
 	if filterErr != "" {
@@ -85,13 +119,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expenses, err := h.repo.GetAll(ctx, filter)
+	expenses, err := h.repo.GetAll(ctx, userID, filter)
 	if err != nil {
 		log.Printf("list expenses: %v", err)
 		http.Error(w, "Не удалось загрузить траты", http.StatusInternalServerError)
 		return
 	}
-	total, err := h.repo.Total(ctx, filter)
+	total, err := h.repo.Total(ctx, userID, filter)
 	if err != nil {
 		log.Printf("total expenses: %v", err)
 		http.Error(w, "Не удалось посчитать итог", http.StatusInternalServerError)
@@ -113,7 +147,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if !filter.To.IsZero() {
 		data.To = filter.To.Format(dateLayout)
 	}
-	h.render(w, status, "expenses.html", data)
+	h.render(w, r, status, "expenses.html", data)
 }
 
 func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +157,7 @@ func (h *Handler) NewForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Не удалось загрузить категории", http.StatusInternalServerError)
 		return
 	}
-	h.render(w, http.StatusOK, "add.html", pageData{
+	h.render(w, r, http.StatusOK, "add.html", pageData{
 		Title:      "Добавить трату",
 		Date:       time.Now().Format(dateLayout),
 		Categories: categories,
@@ -149,7 +183,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	categoryID, categoryOK := parseCategoryID(r.FormValue("category"), categories)
 
 	fail := func(msg string) {
-		h.render(w, http.StatusUnprocessableEntity, "add.html", pageData{
+		h.render(w, r, http.StatusUnprocessableEntity, "add.html", pageData{
 			Title: "Добавить трату", Error: msg,
 			Amount: amountStr, Description: description, Date: dateStr,
 			Categories: categories, CategoryID: categoryID,
@@ -169,7 +203,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.repo.Create(r.Context(), amount, description, date, categoryID); err != nil {
+	if _, err := h.repo.Create(r.Context(), currentUserID(r), amount, description, date, categoryID); err != nil {
 		log.Printf("create expense: %v", err)
 		fail("Не удалось сохранить трату")
 		return
@@ -184,7 +218,7 @@ func (h *Handler) EditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expense, err := h.repo.GetByID(r.Context(), id)
+	expense, err := h.repo.GetByID(r.Context(), currentUserID(r), id)
 	if errors.Is(err, repository.ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -202,7 +236,7 @@ func (h *Handler) EditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, http.StatusOK, "edit.html", pageData{
+	h.render(w, r, http.StatusOK, "edit.html", pageData{
 		Title:       "Редактировать трату",
 		ID:          expense.ID,
 		Amount:      strconv.FormatFloat(expense.Amount, 'f', 2, 64),
@@ -238,7 +272,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	categoryID, categoryOK := parseCategoryID(r.FormValue("category"), categories)
 
 	fail := func(msg string) {
-		h.render(w, http.StatusUnprocessableEntity, "edit.html", pageData{
+		h.render(w, r, http.StatusUnprocessableEntity, "edit.html", pageData{
 			Title: "Редактировать трату", Error: msg,
 			ID: id, Amount: amountStr, Description: description, Date: dateStr,
 			Categories: categories, CategoryID: categoryID,
@@ -258,7 +292,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.repo.Update(r.Context(), id, amount, description, date, categoryID)
+	err = h.repo.Update(r.Context(), currentUserID(r), id, amount, description, date, categoryID)
 	if errors.Is(err, repository.ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -279,7 +313,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.repo.Delete(r.Context(), id)
+	err = h.repo.Delete(r.Context(), currentUserID(r), id)
 	if err != nil && !errors.Is(err, repository.ErrNotFound) {
 		log.Printf("delete expense %d: %v", id, err)
 		http.Error(w, "Не удалось удалить трату", http.StatusInternalServerError)

@@ -11,8 +11,17 @@
     <div class="container">
       <a class="brand" href="/expenses">💰 Трекер трат</a>
       <nav>
+        {{if .UserEmail}}
         <a href="/expenses">Список</a>
         <a href="/expenses/new">Добавить</a>
+        <span class="user">{{.UserEmail}}</span>
+        <form method="POST" action="/logout" class="logout">
+          <button type="submit" class="link-button">Выйти</button>
+        </form>
+        {{else}}
+        <a href="/login">Войти</a>
+        <a href="/register">Регистрация</a>
+        {{end}}
       </nav>
     </div>
   </header>

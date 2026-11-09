@@ -29,3 +29,9 @@ button { padding: 10px; background: #2b3a55; color: #fff; border: 0; border-radi
 }
 .filters button { padding: 9px 16px; }
 footer { color: #888; font-size: 13px; padding-bottom: 24px; }
+.info { background: #e6f4ea; color: #1e6b34; padding: 10px 14px; border-radius: 6px; max-width: 420px; }
+header nav { display: flex; align-items: center; }
+header .user { margin-left: 16px; opacity: .75; font-size: 14px; }
+header form.logout { display: inline; padding: 0; background: none; max-width: none; margin-left: 16px; }
+header .link-button { color: #fff; text-decoration: none; }
+header .link-button:hover { text-decoration: underline; }
