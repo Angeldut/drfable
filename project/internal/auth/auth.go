@@ -80,3 +80,36 @@ func Require(sessions *repository.SessionRepository, next http.Handler) http.Han
 		next.ServeHTTP(w, r.WithContext(ContextWithUser(r.Context(), user)))
 	})
 }
+
+func RequireAPI(sessions *repository.SessionRepository, next http.Handler) http.Handler {
+	unauthorized := func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"unauthorized"}` + "\n"))
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+
+		c, err := r.Cookie(CookieName)
+		if err != nil || c.Value == "" {
+			unauthorized(w)
+			return
+		}
+
+		user, err := sessions.GetUser(r.Context(), c.Value)
+		if errors.Is(err, repository.ErrSessionNotFound) {
+			ClearSessionCookie(w)
+			unauthorized(w)
+			return
+		}
+		if err != nil {
+			log.Printf("auth: %v", err)
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error":"internal error"}` + "\n"))
+			return
+		}
+
+		next.ServeHTTP(w, r.WithContext(ContextWithUser(r.Context(), user)))
+	})
+}
