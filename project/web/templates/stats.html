@@ -1,0 +1,36 @@
+{{define "content"}}
+<div id="stats" data-year="{{.Year}}">
+  <p id="stats-error" class="error" hidden></p>
+
+  <section class="card">
+    <h2>Расходы по категориям</h2>
+    <div class="filters-inline">
+      <label>С
+        <input type="date" id="cat-from">
+      </label>
+      <label>По
+        <input type="date" id="cat-to">
+      </label>
+      <button type="button" id="cat-reset" class="secondary">Весь период</button>
+    </div>
+    <p id="cat-empty" class="empty" hidden>За выбранный период трат нет.</p>
+    <div class="chart-box" id="cat-box"><canvas id="cat-chart"></canvas></div>
+    <p id="cat-total" class="stats-total"></p>
+  </section>
+
+  <section class="card">
+    <h2>Расходы по месяцам</h2>
+    <div class="filters-inline">
+      <label>Год
+        <input type="number" id="month-year" min="2000" max="2100" step="1" value="{{.Year}}">
+      </label>
+    </div>
+    <p id="month-empty" class="empty" hidden>За выбранный год трат нет.</p>
+    <div class="chart-box" id="month-box"><canvas id="month-chart"></canvas></div>
+    <p id="month-total" class="stats-total"></p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/stats.js"></script>
+{{end}}

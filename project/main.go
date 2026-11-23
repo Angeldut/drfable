@@ -110,6 +110,8 @@ func main() {
 
 	protect := func(f http.HandlerFunc) http.Handler { return auth.Require(sessions, f) }
 
+	protectAPI := func(f http.HandlerFunc) http.Handler { return auth.RequireAPI(sessions, f) }
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.Home)
 	mux.HandleFunc("GET /register", h.RegisterForm)
@@ -123,6 +125,9 @@ func main() {
 	mux.Handle("GET /expenses/{id}/edit", protect(h.EditForm))
 	mux.Handle("POST /expenses/{id}/edit", protect(h.Update))
 	mux.Handle("POST /expenses/{id}/delete", protect(h.Delete))
+	mux.Handle("GET /stats", protect(h.StatsPage))
+	mux.Handle("GET /api/stats/by-category", protectAPI(h.APIStatsByCategory))
+	mux.Handle("GET /api/stats/by-month", protectAPI(h.APIStatsByMonth))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
 	addr := ":8080"

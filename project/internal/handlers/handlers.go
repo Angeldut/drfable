@@ -48,6 +48,8 @@ type pageData struct {
 	UserEmail string 
 	FormEmail string 
 	Info      string
+
+	Year int
 }
 
 func New(
@@ -69,7 +71,7 @@ func New(
 	}
 	h.dummyHash = dummy
 
-	for _, page := range []string{"expenses.html", "add.html", "edit.html", "login.html", "register.html"} {
+	for _, page := range []string{"expenses.html", "add.html", "edit.html", "login.html", "register.html", "stats.html"} {
 		t, err := template.ParseFiles(layout, filepath.Join(templatesDir, page))
 		if err != nil {
 			return nil, err
